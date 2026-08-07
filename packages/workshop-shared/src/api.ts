@@ -925,6 +925,8 @@ export type AiGatewayInfo = {
   enabledProviders: AiModelProvider[];
 } | {
   enabled: false;
+  // Deployment-owned direct model, when one is configured outside AI Gateway mode.
+  platformModelId?: string;
 };
 
 // Configuration specifying how to connect to an AI model provider.

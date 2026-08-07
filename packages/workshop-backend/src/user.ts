@@ -565,10 +565,17 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   async setQuickModel(id: string | null): Promise<void> {
+    let platformModel = getPlatformAiModel(this.env);
+    if (platformModel) {
+      if (id === platformModel.profile.id) return;
+      throw new Error(`Quick model is fixed to built-in model "${platformModel.profile.name}".`);
+    }
     this.storage.quickModel.put(id);
   }
 
   async getQuickModel(): Promise<null | string> {
+    let platformModel = getPlatformAiModel(this.env);
+    if (platformModel) return platformModel.profile.id;
     let result = this.storage.quickModel.get();
     if (result && this.storage.aiModels.get(result)) {
       return result;

@@ -15,6 +15,7 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import { LanguageModelGatekeeper } from "./ai-models";
+import { getPlatformAiModel } from "./platform-ai-model.js";
 import { getAiGatewayConfig } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
 import { BlueprintKvRecord, buildBlueprintArchiveStream, sanitizeBlueprintOutput, listFeaturedBlueprintsFromKv, parseBlueprintArchive, randomBlueprintId, readBlueprintContent, readBlueprintKvRecord } from "./blueprint-archive.js";
@@ -194,7 +195,10 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
         enabledProviders: [...gwConfig.providers] as AiModelProvider[],
       });
     } else {
-      return Promise.resolve({ enabled: false });
+      return Promise.resolve({
+        enabled: false,
+        platformModelId: getPlatformAiModel(this.env)?.profile.id,
+      });
     }
   }
 

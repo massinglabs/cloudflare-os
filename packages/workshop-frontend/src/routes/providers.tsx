@@ -36,28 +36,35 @@ function ModelRow({
   model,
   isQuick,
   isBuiltIn,
+  quickModelFixed,
   onDelete,
   onSetQuick,
 }: {
   model: AiChatAuthorInfo
   isQuick: boolean
   isBuiltIn: boolean
+  quickModelFixed: boolean
   onDelete: () => void
   onSetQuick: () => void
 }) {
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onSetQuick}
+      role={quickModelFixed ? undefined : 'button'}
+      tabIndex={quickModelFixed ? undefined : 0}
+      onClick={quickModelFixed ? undefined : onSetQuick}
       onKeyDown={(e) => {
+        if (quickModelFixed) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onSetQuick()
         }
       }}
-      title={isQuick ? 'Quick model. Click to clear' : 'Click to set as quick model'}
-      className="group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-150 ease-out hover:bg-kumo-tint"
+      title={quickModelFixed
+        ? 'Deployment-managed quick model'
+        : isQuick ? 'Quick model. Click to clear' : 'Click to set as quick model'}
+      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-150 ease-out ${
+        quickModelFixed ? '' : 'cursor-pointer hover:bg-kumo-tint'
+      }`}
     >
       {/* Neutral monogram — matches the sidebar/workspaces treatment */}
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-kumo-fill text-[12px] font-medium text-kumo-subtle">
@@ -88,32 +95,36 @@ function ModelRow({
       </div>
 
       {/* Actions */}
-      <div onClick={(e) => { e.stopPropagation() }}>
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={
-              <button
-                aria-label="Provider actions"
-                className="cursor-pointer rounded-md p-1.5 text-kumo-subtle transition-colors hover:bg-kumo-fill hover:text-kumo-default focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-              >
-                <DotsThreeVertical size={16} />
-              </button>
-            }
-          />
-          <DropdownMenu.Content className={MENU_CONTENT}>
-            <DropdownMenu.Item onClick={onSetQuick} className={MENU_ITEM}>
-              <Lightning size={13} className="mr-2" weight={isQuick ? 'fill' : 'regular'} />
-              {isQuick ? 'Clear quick model' : 'Set as quick model'}
-            </DropdownMenu.Item>
-            {!isBuiltIn && (
-              <DropdownMenu.Item variant="danger" onClick={onDelete} className={MENU_ITEM_DANGER}>
-                <Trash size={13} className="mr-2" />
-                Delete provider
-              </DropdownMenu.Item>
-            )}
-          </DropdownMenu.Content>
-        </DropdownMenu>
-      </div>
+      {(!quickModelFixed || !isBuiltIn) && (
+        <div onClick={(e) => { e.stopPropagation() }}>
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <button
+                  aria-label="Provider actions"
+                  className="cursor-pointer rounded-md p-1.5 text-kumo-subtle transition-colors hover:bg-kumo-fill hover:text-kumo-default focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                  <DotsThreeVertical size={16} />
+                </button>
+              }
+            />
+            <DropdownMenu.Content className={MENU_CONTENT}>
+              {!quickModelFixed && (
+                <DropdownMenu.Item onClick={onSetQuick} className={MENU_ITEM}>
+                  <Lightning size={13} className="mr-2" weight={isQuick ? 'fill' : 'regular'} />
+                  {isQuick ? 'Clear quick model' : 'Set as quick model'}
+                </DropdownMenu.Item>
+              )}
+              {!isBuiltIn && (
+                <DropdownMenu.Item variant="danger" onClick={onDelete} className={MENU_ITEM_DANGER}>
+                  <Trash size={13} className="mr-2" />
+                  Delete provider
+                </DropdownMenu.Item>
+              )}
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        </div>
+      )}
     </div>
   )
 }
@@ -166,8 +177,10 @@ function ProvidersPage() {
   useEffect(() => { fetchAll() }, [authenticatedApi])
 
   const gatewayMode = aiConfig?.enabled === true
+  const platformModelId = aiConfig?.enabled === false ? aiConfig.platformModelId : undefined
 
   const isBuiltIn = (modelId: string): boolean => {
+    if (modelId === platformModelId) return true
     if (!aiConfig?.enabled) return false
     const enabled = new Set((aiConfig as Extract<AiGatewayInfo, { enabled: true }>).enabledProviders)
     return PROVIDER_ORDER.some((p) => enabled.has(p) && modelId in SUGGESTED_MODELS[p])
@@ -259,7 +272,8 @@ function ProvidersPage() {
                   {quickModel
                     ? `${models.find((m) => m.id === quickModel)?.name ?? quickModel}.`
                     : 'none set.'}{' '}
-                  Used for fast tasks like generating chat titles. Click a model to set it.
+                  Used for fast tasks like generating chat titles.{' '}
+                  {platformModelId ? 'Managed by your deployment.' : 'Click a model to set it.'}
                 </span>
               </Notice>
             )}
@@ -308,6 +322,7 @@ function ProvidersPage() {
                 model={model}
                 isQuick={quickModel === model.id}
                 isBuiltIn={isBuiltIn(model.id)}
+                quickModelFixed={model.id === platformModelId}
                 onDelete={() => handleDelete(model)}
                 onSetQuick={() => handleSetQuick(model.id)}
               />
