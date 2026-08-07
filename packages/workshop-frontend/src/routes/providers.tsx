@@ -177,10 +177,17 @@ function ProvidersPage() {
   useEffect(() => { fetchAll() }, [authenticatedApi])
 
   const gatewayMode = aiConfig?.enabled === true
-  const platformModelId = aiConfig?.enabled === false ? aiConfig.platformModelId : undefined
+  const platformModelIds = new Set(
+    aiConfig?.enabled === false
+      ? aiConfig.platformModelIds ?? (aiConfig.platformModelId ? [aiConfig.platformModelId] : [])
+      : [],
+  )
+  const platformQuickModelId = aiConfig?.enabled === false
+    ? aiConfig.platformQuickModelId ?? aiConfig.platformModelId
+    : undefined
 
   const isBuiltIn = (modelId: string): boolean => {
-    if (modelId === platformModelId) return true
+    if (platformModelIds.has(modelId)) return true
     if (!aiConfig?.enabled) return false
     const enabled = new Set((aiConfig as Extract<AiGatewayInfo, { enabled: true }>).enabledProviders)
     return PROVIDER_ORDER.some((p) => enabled.has(p) && modelId in SUGGESTED_MODELS[p])
@@ -273,7 +280,7 @@ function ProvidersPage() {
                     ? `${models.find((m) => m.id === quickModel)?.name ?? quickModel}.`
                     : 'none set.'}{' '}
                   Used for fast tasks like generating chat titles.{' '}
-                  {platformModelId ? 'Managed by your deployment.' : 'Click a model to set it.'}
+                  {platformModelIds.size > 0 ? 'Managed by your deployment.' : 'Click a model to set it.'}
                 </span>
               </Notice>
             )}
@@ -322,7 +329,7 @@ function ProvidersPage() {
                 model={model}
                 isQuick={quickModel === model.id}
                 isBuiltIn={isBuiltIn(model.id)}
-                quickModelFixed={platformModelId !== undefined}
+                quickModelFixed={platformQuickModelId !== undefined}
                 onDelete={() => handleDelete(model)}
                 onSetQuick={() => handleSetQuick(model.id)}
               />

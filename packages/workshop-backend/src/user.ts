@@ -12,7 +12,7 @@ import type { AdminSettings } from "./admin-settings.js";
 import { isReservedBlueprintKey, readBlueprintKvRecord } from "./blueprint-archive.js";
 import { filterEnabledResources, isResourceDisabled, readAdminConfig } from "./admin-config.js";
 import { buildGatekeeperVendorMap } from "./auth/auth-vendors.js";
-import { getPlatformAiModel } from "./platform-ai-model.js";
+import { getPlatformAiModels } from "./platform-ai-model.js";
 
 const logger = createWorkshopLogger("workshop.user");
 
@@ -507,11 +507,14 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     let result: AiChatAuthorInfo[] = [];
     let reservedModelIds = new Set<string>();
 
-    // A deployment-funded direct model is first so it becomes the default for new chats.
-    let platformModel = getPlatformAiModel(this.env);
-    if (platformModel) {
-      result.push(platformModel.profile);
-      reservedModelIds.add(platformModel.profile.id);
+    // Deployment-funded direct models come first in configured order, so the first becomes the
+    // default for new chats.
+    let platformModels = getPlatformAiModels(this.env);
+    if (platformModels) {
+      for (let model of platformModels.models) {
+        result.push(model.profile);
+        reservedModelIds.add(model.profile.id);
+      }
     }
 
     // When AI Gateway mode is active, include all suggested models for enabled providers.
@@ -533,9 +536,10 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   async addModel(profile: AiChatAuthorInfo, config: AiModelConfig): Promise<void> {
-    let platformModel = getPlatformAiModel(this.env);
-    if (platformModel?.profile.id === profile.id) {
-      throw new Error(`Cannot replace built-in model "${platformModel.profile.name}".`);
+    let platformModels = getPlatformAiModels(this.env);
+    let builtInModel = platformModels?.models.find(model => model.profile.id === profile.id);
+    if (builtInModel) {
+      throw new Error(`Cannot replace built-in model "${builtInModel.profile.name}".`);
     }
     let gwConfig = getAiGatewayConfig(this.env);
     if (gwConfig && !gwConfig.providers.has(config.provider)) {
@@ -547,9 +551,10 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   async deleteModel(id: string): Promise<void> {
-    let platformModel = getPlatformAiModel(this.env);
-    if (platformModel?.profile.id === id) {
-      throw new Error(`Cannot delete built-in model "${platformModel.profile.name}".`);
+    let platformModels = getPlatformAiModels(this.env);
+    let builtInModel = platformModels?.models.find(model => model.profile.id === id);
+    if (builtInModel) {
+      throw new Error(`Cannot delete built-in model "${builtInModel.profile.name}".`);
     }
     // In AI Gateway mode, don't allow deleting built-in suggested models.
     let gwConfig = getAiGatewayConfig(this.env);
@@ -565,17 +570,20 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   async setQuickModel(id: string | null): Promise<void> {
-    let platformModel = getPlatformAiModel(this.env);
-    if (platformModel) {
-      if (id === platformModel.profile.id) return;
-      throw new Error(`Quick model is fixed to built-in model "${platformModel.profile.name}".`);
+    let platformModels = getPlatformAiModels(this.env);
+    if (platformModels) {
+      let quickModel = platformModels.models.find(
+          model => model.profile.id === platformModels.quickModelId);
+      if (id === platformModels.quickModelId) return;
+      throw new Error(`Quick model is fixed to built-in model "${quickModel?.profile.name ??
+        platformModels.quickModelId}".`);
     }
     this.storage.quickModel.put(id);
   }
 
   async getQuickModel(): Promise<null | string> {
-    let platformModel = getPlatformAiModel(this.env);
-    if (platformModel) return platformModel.profile.id;
+    let platformModels = getPlatformAiModels(this.env);
+    if (platformModels) return platformModels.quickModelId;
     let result = this.storage.quickModel.get();
     if (result && this.storage.aiModels.get(result)) {
       return result;
@@ -591,9 +599,9 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   async setPreferredModel(id: string | null): Promise<void> {
     if (id !== null) {
       // Validate that the model exists in the user's configured models or as a platform model.
-      let platformModel = getPlatformAiModel(this.env);
+      let platformModels = getPlatformAiModels(this.env);
       let gwConfig = getAiGatewayConfig(this.env);
-      let exists = platformModel?.profile.id === id ||
+      let exists = platformModels?.models.some(model => model.profile.id === id) ||
           !!this.storage.aiModels.get(id) || !!gwConfig?.resolveModel(id);
       if (!exists) {
         throw new Error(`No such model: ${id}`);
@@ -689,15 +697,15 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
 
   // DO NOT MAKE PUBLIC -- returns API keys.
   async getChatContext(modelId: string | null): Promise<UserChatContext> {
-    let platformModel = getPlatformAiModel(this.env);
+    let platformModels = getPlatformAiModels(this.env);
     let gwConfig = getAiGatewayConfig(this.env);
 
     let result: UserChatContext = {
       profile: this.storage.profile.get()
     };
     if (modelId) {
-      if (platformModel?.profile.id === modelId) {
-        result.aiModel = platformModel;
+      if (platformModels) {
+        result.aiModel = platformModels.models.find(model => model.profile.id === modelId);
       } else if (gwConfig) {
         // In AI Gateway mode, resolve gateway models before user-configured models.
         result.aiModel = gwConfig.resolveModel(modelId);
@@ -709,9 +717,10 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     }
 
     // Resolve the quick model (used for lightweight tasks like title generation).
-    if (platformModel) {
-      // Use the only deployment-funded model for lightweight title-generation tasks as well.
-      result.quickModel = platformModel.config;
+    if (platformModels) {
+      // Use the deployment-selected quick model for lightweight title-generation tasks as well.
+      result.quickModel = platformModels.models.find(
+          model => model.profile.id === platformModels.quickModelId)?.config;
     } else if (gwConfig) {
       // In AI Gateway mode, always use the hardcoded quick model.
       result.quickModel = gwConfig.getQuickModelConfig();
