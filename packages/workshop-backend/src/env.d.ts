@@ -23,6 +23,13 @@ declare global {
       // Note: outside gateway mode, Workers AI (provider "cloudflare") is BYOK like every other
       // provider -- the account ID and API token live in the user's model config, not in env.
 
+      // Optional deployment-funded OpenAI-compatible model. This direct mode is mutually exclusive
+      // with CF_AI_GATEWAY because gateway mode routes every model through the configured gateway.
+      PLATFORM_AI_MODEL_ID?: string;
+      PLATFORM_AI_MODEL_NAME?: string;
+      PLATFORM_AI_MODEL_BASE_URL?: string;
+      PLATFORM_AI_MODEL_API_TOKEN?: string;
+
       // Blueprint storage bindings.
       BLUEPRINTS: KVNamespace;             // Workers KV for blueprint metadata lookup
       BLUEPRINT_CONTENT: R2Bucket;         // R2 bucket for blueprint code snapshots

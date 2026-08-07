@@ -283,6 +283,24 @@ describe("getModel direct routing (no gateway)", () => {
     expect(request.headers.get("cf-aig-metadata")).toBeNull();
   }, 15000);
 
+  it("uses a custom OpenAI Responses base URL with bearer authentication", async () => {
+    const handle = getModel(env({ CF_AI_GATEWAY: undefined }), {
+      provider: "openai",
+      model: "deployment-name",
+      apiToken: "direct-api-token",
+      apiUrl: "https://resource.example/openai/v1",
+    }, INITIATOR);
+
+    expect(handle.model.api).toBe("openai-responses");
+    expect(handle.model.baseUrl).toBe("https://resource.example/openai/v1");
+    expect(handle.aiGatewayLogRoute).toBeUndefined();
+
+    const request = await captureRequest(handle);
+    expect(request.url).toBe("https://resource.example/openai/v1/responses");
+    expect(request.headers.get("authorization")).toBe("Bearer direct-api-token");
+    expect(JSON.parse(request.body).model).toBe("deployment-name");
+  }, 15000);
+
   it("uses the config's own account and token for direct Workers AI", async () => {
     // Outside gateway mode, Workers AI is BYOK like any other provider: credentials come from
     // the model config (never from env, which only configures gateway mode).
