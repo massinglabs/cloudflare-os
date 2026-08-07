@@ -3,6 +3,9 @@ import { RpcStub } from 'capnweb'
 import { PublicApi, AuthenticatedApi } from '@gadgets/workshop-shared/api'
 
 const CF_ACCESS_MODE = import.meta.env.VITE_CF_ACCESS_MODE === 'true'
+const CF_ACCESS_LOGOUT_PATH = '/cdn-cgi/access/logout'
+const CF_ACCESS_LOGOUT_WARNING =
+  'Sign out of Cloudflare Access? This also signs you out of other Access-protected Massing Labs apps.'
 
 interface AuthState {
   token: string | null
@@ -12,6 +15,15 @@ interface AuthState {
 }
 
 export { CF_ACCESS_MODE }
+
+export function logoutFromCfAccess(
+  confirm: (message: string) => boolean = window.confirm.bind(window),
+  assign: (url: string) => void = window.location.assign.bind(window.location),
+): boolean {
+  if (!confirm(CF_ACCESS_LOGOUT_WARNING)) return false
+  assign(CF_ACCESS_LOGOUT_PATH)
+  return true
+}
 
 export function useAuth(publicApi: RpcStub<PublicApi>) {
   const [authState, setAuthState] = useState<AuthState>({
@@ -94,6 +106,11 @@ export function useAuth(publicApi: RpcStub<PublicApi>) {
   }
 
   const logout = () => {
+    if (CF_ACCESS_MODE) {
+      logoutFromCfAccess()
+      return
+    }
+
     // Use functional updater to read current state (avoids stale closure).
     setAuthState(prev => {
       if (prev.authenticatedApi) {
@@ -107,9 +124,7 @@ export function useAuth(publicApi: RpcStub<PublicApi>) {
       }
     })
 
-    if (!CF_ACCESS_MODE) {
-      localStorage.removeItem('authToken')
-    }
+    localStorage.removeItem('authToken')
   }
 
   return {
