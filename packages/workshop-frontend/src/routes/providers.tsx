@@ -322,7 +322,7 @@ function ProvidersPage() {
                 model={model}
                 isQuick={quickModel === model.id}
                 isBuiltIn={isBuiltIn(model.id)}
-                quickModelFixed={model.id === platformModelId}
+                quickModelFixed={platformModelId !== undefined}
                 onDelete={() => handleDelete(model)}
                 onSetQuick={() => handleSetQuick(model.id)}
               />
