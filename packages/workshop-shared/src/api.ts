@@ -925,6 +925,11 @@ export type AiGatewayInfo = {
   enabledProviders: AiModelProvider[];
 } | {
   enabled: false;
+  // Deployment-owned direct models, when configured outside AI Gateway mode.
+  platformModelIds?: string[];
+  platformQuickModelId?: string;
+  // Legacy scalar metadata retained while old and new frontends may overlap during rollout.
+  platformModelId?: string;
 };
 
 // Configuration specifying how to connect to an AI model provider.

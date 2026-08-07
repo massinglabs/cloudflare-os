@@ -15,6 +15,7 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import { LanguageModelGatekeeper } from "./ai-models";
+import { getPlatformAiModels } from "./platform-ai-model.js";
 import { getAiGatewayConfig } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
 import { BlueprintKvRecord, buildBlueprintArchiveStream, sanitizeBlueprintOutput, listFeaturedBlueprintsFromKv, parseBlueprintArchive, randomBlueprintId, readBlueprintContent, readBlueprintKvRecord } from "./blueprint-archive.js";
@@ -187,6 +188,9 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   }
 
   getAiConfig(): Promise<AiGatewayInfo> {
+    // Parse direct platform configuration first so an invalid mutually-exclusive combination is
+    // rejected consistently even when the Gateway branch would otherwise win.
+    let platformModels = getPlatformAiModels(this.env);
     let gwConfig = getAiGatewayConfig(this.env);
     if (gwConfig) {
       return Promise.resolve({
@@ -194,7 +198,13 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
         enabledProviders: [...gwConfig.providers] as AiModelProvider[],
       });
     } else {
-      return Promise.resolve({ enabled: false });
+      let platformModelIds = platformModels?.models.map(model => model.profile.id) ?? [];
+      return Promise.resolve({
+        enabled: false,
+        platformModelIds,
+        ...(platformModelIds[0] ? { platformModelId: platformModelIds[0] } : {}),
+        ...(platformModels ? { platformQuickModelId: platformModels.quickModelId } : {}),
+      });
     }
   }
 
